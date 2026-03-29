@@ -14,9 +14,10 @@ export function serializeProject(project: ProjectDocument): ProjectDetail {
     recordings: [...project.recordings]
       .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
       .map((recording) => ({
-      ...recording,
-      createdAt: recording.createdAt.toISOString(),
-      updatedAt: recording.updatedAt.toISOString()
+        ...recording,
+        directedPreviewVideoUrl: recording.directedPreviewVideoUrl ?? null,
+        createdAt: recording.createdAt.toISOString(),
+        updatedAt: recording.updatedAt.toISOString()
       })),
     shotEvents: [...project.shotEvents]
       .sort((left, right) => left.timestampMs - right.timestampMs)

@@ -35,6 +35,7 @@ export interface RecordingSummary {
   id: string;
   projectId: string;
   originalVideoUrl: string;
+  directedPreviewVideoUrl: string | null;
   durationMs: number;
   metadataJson: unknown;
   createdAt: string;

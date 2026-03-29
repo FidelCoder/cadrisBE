@@ -7,7 +7,7 @@ Backend API for Cadris. This repo owns project persistence, recording metadata, 
 - Express + TypeScript API
 - Local MongoDB-backed project persistence
 - Local storage adapter for saved recordings
-- Project, recording, and shot-event service layer
+- Project, recording, directed-preview, and shot-event service layer
 - Export-preview endpoint derived from saved timeline metadata
 
 ## Local setup
@@ -53,6 +53,7 @@ The health route should report `reachable: true` and list `llama3.2:1b` in `avai
 
 - Storage is local-first for development and intentionally abstracted for future S3-compatible storage.
 - MongoDB stores project documents with embedded recordings and shot events for a lightweight local prototype path.
-- Export generation is metadata-first and lightweight in v1.
+- Recording persistence now keeps the untouched source clip and can also store a lightweight directed preview clip captured during recording.
+- Export generation stays lightweight in v1 and surfaces the latest directed preview plus timeline-derived segments.
 - Authentication is not enforced yet.
 - Local AI review is wired for an Ollama-compatible runtime so you can generate session notes without cloud tokens.

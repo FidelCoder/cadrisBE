@@ -3,7 +3,7 @@ import express from "express";
 import cors from "cors";
 import multer from "multer";
 import { getProjectInsights } from "@/lib/ai/insights";
-import { getLocalLlmHealth } from "@/lib/ai/provider";
+import { getLocalLlmHealth, probeLocalLlm } from "@/lib/ai/provider";
 import { projectStatuses, type ProjectStatus } from "@/lib/domain/cadris";
 import { buildExportPreview, createProject, getProjectById, listProjects, persistProjectRecording, updateProjectStatus } from "@/lib/projects/service";
 import { getStorageAdapter } from "@/lib/storage";
@@ -33,6 +33,20 @@ app.get("/api/health", (_request, response) => {
 app.get("/api/ai/health", async (_request, response) => {
   const health = await getLocalLlmHealth();
   response.json(health);
+});
+
+app.post("/api/ai/probe", async (_request, response) => {
+  const health = await getLocalLlmHealth();
+
+  if (!health.reachable || !health.availableModels.includes(health.model)) {
+    response.status(503).json({
+      error: "Configured Ollama model is not ready.",
+      health
+    });
+    return;
+  }
+
+  response.json(await probeLocalLlm());
 });
 
 app.get("/api/projects", async (_request, response) => {
@@ -74,16 +88,38 @@ app.patch("/api/projects/:projectId", async (request, response) => {
   response.json({ project });
 });
 
-app.post("/api/projects/:projectId/recordings", upload.single("video"), async (request, response) => {
-  if (!request.file) {
+app.post(
+  "/api/projects/:projectId/recordings",
+  upload.fields([
+    { name: "video", maxCount: 1 },
+    { name: "directedVideo", maxCount: 1 }
+  ]),
+  async (request, response) => {
+  const uploadedFiles = request.files as
+    | {
+        video?: Express.Multer.File[];
+        directedVideo?: Express.Multer.File[];
+      }
+    | undefined;
+  const rawVideo = uploadedFiles?.video?.[0];
+  const directedVideo = uploadedFiles?.directedVideo?.[0];
+
+  if (!rawVideo) {
     response.status(400).json({ error: "Video file is required" });
     return;
   }
 
   const result = await persistProjectRecording(String(request.params.projectId), {
-    fileName: request.file.originalname,
-    mimeType: request.file.mimetype,
-    body: request.file.buffer,
+    fileName: rawVideo.originalname,
+    mimeType: rawVideo.mimetype,
+    body: rawVideo.buffer,
+    directedPreview: directedVideo
+      ? {
+          fileName: directedVideo.originalname,
+          mimeType: directedVideo.mimetype,
+          body: directedVideo.buffer
+        }
+      : null,
     durationMs: Number(request.body.durationMs || 0),
     metadataJson: request.body.metadataJson,
     shotEventsJson: request.body.shotEventsJson

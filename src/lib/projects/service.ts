@@ -22,6 +22,14 @@ const persistRecordingSchema = z.object({
   fileName: z.string().min(1),
   mimeType: z.string().optional().default("video/webm"),
   body: z.instanceof(Buffer),
+  directedPreview: z
+    .object({
+      fileName: z.string().min(1),
+      mimeType: z.string().optional().default("video/webm"),
+      body: z.instanceof(Buffer)
+    })
+    .nullable()
+    .optional(),
   durationMs: z.coerce.number().int().nonnegative(),
   metadataJson: z.union([z.string(), z.record(z.any()), z.array(z.any())]).transform((value) =>
     typeof value === "string" ? (JSON.parse(value) as unknown) : value
@@ -124,6 +132,11 @@ export async function persistProjectRecording(
     fileName: string;
     mimeType?: string;
     body: Buffer;
+    directedPreview?: {
+      fileName: string;
+      mimeType?: string;
+      body: Buffer;
+    } | null;
     durationMs: number;
     metadataJson: unknown;
     shotEventsJson: unknown;
@@ -144,12 +157,21 @@ export async function persistProjectRecording(
     mimeType: parsed.mimeType,
     body: parsed.body
   });
+  const directedPreviewAsset = parsed.directedPreview
+    ? await storage.saveRecording({
+        projectId,
+        fileName: parsed.directedPreview.fileName,
+        mimeType: parsed.directedPreview.mimeType,
+        body: parsed.directedPreview.body
+      })
+    : null;
 
   const now = new Date();
   const recording = {
     id: randomUUID(),
     projectId,
     originalVideoUrl: storedAsset.publicUrl,
+    directedPreviewVideoUrl: directedPreviewAsset?.publicUrl ?? null,
     durationMs: parsed.durationMs,
     metadataJson: parsed.metadataJson,
     createdAt: now,
@@ -203,6 +225,8 @@ export async function buildExportPreview(projectId: string) {
     return null;
   }
 
+  const latestRecording = project.recordings[0] ?? null;
+
   const segments = project.shotEvents.map((event, index) => {
     const nextEvent = project.shotEvents[index + 1];
     return {
@@ -212,12 +236,25 @@ export async function buildExportPreview(projectId: string) {
       startsAtMs: event.timestampMs,
       endsAtMs: nextEvent?.timestampMs ?? project.recordings[0]?.durationMs ?? event.timestampMs + 3_000,
       confidence: event.confidence,
-      notes: event.notes
+      notes: event.notes,
+      cropBox: {
+        x: event.cropX,
+        y: event.cropY,
+        width: event.cropWidth,
+        height: event.cropHeight
+      }
     };
   });
 
   return {
     project,
+    recording: latestRecording
+      ? {
+          originalVideoUrl: latestRecording.originalVideoUrl,
+          directedPreviewVideoUrl: latestRecording.directedPreviewVideoUrl ?? null,
+          durationMs: latestRecording.durationMs
+        }
+      : null,
     segments
   };
 }

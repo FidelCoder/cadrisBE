@@ -34,6 +34,42 @@ function extractJsonObject(text: string) {
   return text.slice(start, end + 1);
 }
 
+async function ollamaGenerate(input: {
+  prompt: string;
+  format?: "json";
+}) {
+  const baseUrl = getBaseUrl();
+  const model = getModel();
+
+  const response = await fetch(`${baseUrl}/api/generate`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      model,
+      prompt: input.prompt,
+      stream: false,
+      ...(input.format ? { format: input.format } : {}),
+      options: {
+        temperature: 0.2
+      }
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`Local LLM request failed with ${response.status}.`);
+  }
+
+  const payload = await safeJson<OllamaGenerateResponse>(response);
+
+  return {
+    baseUrl,
+    model,
+    response: String(payload.response || "").trim()
+  };
+}
+
 export async function getLocalLlmHealth(): Promise<LocalLlmHealth> {
   const baseUrl = getBaseUrl();
   const model = getModel();
@@ -98,30 +134,10 @@ export async function getLocalLlmHealth(): Promise<LocalLlmHealth> {
 export async function generateLocalProjectInsights(input: {
   prompt: string;
 }): Promise<ProjectInsightResult> {
-  const baseUrl = getBaseUrl();
-  const model = getModel();
-
-  const response = await fetch(`${baseUrl}/api/generate`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      model,
-      prompt: input.prompt,
-      stream: false,
-      format: "json",
-      options: {
-        temperature: 0.2
-      }
-    })
+  const payload = await ollamaGenerate({
+    prompt: input.prompt,
+    format: "json"
   });
-
-  if (!response.ok) {
-    throw new Error(`Local LLM request failed with ${response.status}.`);
-  }
-
-  const payload = await safeJson<OllamaGenerateResponse>(response);
   const rawJson = extractJsonObject(payload.response || "");
   const parsed = JSON.parse(rawJson) as Partial<ProjectInsightResult>;
 
@@ -132,5 +148,25 @@ export async function generateLocalProjectInsights(input: {
     risks: Array.isArray(parsed.risks) ? parsed.risks.slice(0, 4).map(String) : [],
     nextSteps: Array.isArray(parsed.nextSteps) ? parsed.nextSteps.slice(0, 4).map(String) : [],
     operatorNotes: parsed.operatorNotes || "No operator notes returned."
+  };
+}
+
+export async function probeLocalLlm() {
+  const prompt = "What is 2 + 2? Reply with only the digit.";
+  const payload = await ollamaGenerate({
+    prompt
+  });
+
+  if (!payload.response) {
+    throw new Error("Ollama returned an empty response.");
+  }
+
+  return {
+    provider: "ollama" as const,
+    baseUrl: payload.baseUrl,
+    model: payload.model,
+    prompt,
+    response: payload.response,
+    generatedAt: new Date().toISOString()
   };
 }

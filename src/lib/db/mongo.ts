@@ -5,6 +5,7 @@ export interface RecordingDocument {
   id: string;
   projectId: string;
   originalVideoUrl: string;
+  directedPreviewVideoUrl: string | null;
   durationMs: number;
   metadataJson: unknown;
   createdAt: Date;
