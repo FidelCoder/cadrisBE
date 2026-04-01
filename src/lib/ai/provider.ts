@@ -1,3 +1,4 @@
+import { getServerEnv } from "@/lib/config/env";
 import type { LocalLlmHealth, ProjectInsightResult } from "@/lib/ai/types";
 
 interface OllamaGenerateResponse {
@@ -12,11 +13,11 @@ interface OllamaTagsResponse {
 }
 
 function getBaseUrl() {
-  return (process.env.LOCAL_LLM_BASE_URL || process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434").replace(/\/$/, "");
+  return getServerEnv().localLlmBaseUrl;
 }
 
 function getModel() {
-  return process.env.LOCAL_LLM_MODEL || process.env.OLLAMA_MODEL || "llama3.2:1b";
+  return getServerEnv().localLlmModel;
 }
 
 async function safeJson<T>(response: Response): Promise<T> {
@@ -71,8 +72,22 @@ async function ollamaGenerate(input: {
 }
 
 export async function getLocalLlmHealth(): Promise<LocalLlmHealth> {
+  const env = getServerEnv();
   const baseUrl = getBaseUrl();
   const model = getModel();
+
+  if (!env.enableLocalLlm) {
+    return {
+      provider: "ollama",
+      configured: false,
+      reachable: false,
+      fallbackAvailable: true,
+      baseUrl,
+      model,
+      availableModels: [],
+      message: "Local LLM support is disabled for this deployment."
+    };
+  }
 
   try {
     const response = await fetch(`${baseUrl}/api/tags`, {
@@ -134,6 +149,10 @@ export async function getLocalLlmHealth(): Promise<LocalLlmHealth> {
 export async function generateLocalProjectInsights(input: {
   prompt: string;
 }): Promise<ProjectInsightResult> {
+  if (!getServerEnv().enableLocalLlm) {
+    throw new Error("Local LLM support is disabled for this deployment.");
+  }
+
   const payload = await ollamaGenerate({
     prompt: input.prompt,
     format: "json"
@@ -152,6 +171,10 @@ export async function generateLocalProjectInsights(input: {
 }
 
 export async function probeLocalLlm() {
+  if (!getServerEnv().enableLocalLlm) {
+    throw new Error("Local LLM support is disabled for this deployment.");
+  }
+
   const prompt = "What is 2 + 2? Reply with only the digit.";
   const payload = await ollamaGenerate({
     prompt

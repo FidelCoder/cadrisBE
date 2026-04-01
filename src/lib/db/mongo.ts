@@ -1,4 +1,5 @@
 import { MongoClient } from "mongodb";
+import { getServerEnv } from "@/lib/config/env";
 import type { ProjectStatus, RecordingMode, FramingStyle, ShotType } from "@/lib/domain/cadris";
 
 export interface RecordingDocument {
@@ -40,16 +41,23 @@ export interface ProjectDocument {
   shotEvents: ShotEventDocument[];
 }
 
-const uri = process.env.MONGODB_URI || "mongodb://127.0.0.1:27017";
-const dbName = process.env.MONGODB_DB_NAME || "cadris";
-
 const globalForMongo = globalThis as unknown as {
   mongoClient?: MongoClient;
   mongoClientPromise?: Promise<MongoClient>;
   mongoIndexesPromise?: Promise<void>;
 };
 
+function getMongoConfig() {
+  const env = getServerEnv();
+
+  return {
+    uri: env.mongodbUri,
+    dbName: env.mongodbDbName
+  };
+}
+
 function createMongoClient() {
+  const { uri } = getMongoConfig();
   return new MongoClient(uri, {
     ignoreUndefined: true
   });
@@ -73,6 +81,7 @@ async function ensureIndexes() {
   if (!globalForMongo.mongoIndexesPromise) {
     globalForMongo.mongoIndexesPromise = (async () => {
       const client = await getMongoClient();
+      const { dbName } = getMongoConfig();
       const collection = client.db(dbName).collection<ProjectDocument>("projects");
       await collection.createIndex({ id: 1 }, { unique: true });
       await collection.createIndex({ updatedAt: -1 });
@@ -85,5 +94,6 @@ async function ensureIndexes() {
 export async function getProjectsCollection() {
   const client = await getMongoClient();
   await ensureIndexes();
+  const { dbName } = getMongoConfig();
   return client.db(dbName).collection<ProjectDocument>("projects");
 }
